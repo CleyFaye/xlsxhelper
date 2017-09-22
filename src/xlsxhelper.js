@@ -20,8 +20,7 @@
 * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 * SOFTWARE.
 * 
-* A lot taken from
-* https://github.com/SheetJS/js-xlsx/blob/master/tests/write js
+* A lot taken from https://github.com/SheetJS/js-xlsx/blob/master/tests/write.js
 * 
 * js-xlsx: https://github.com/SheetJS/js-xlsx
 */
