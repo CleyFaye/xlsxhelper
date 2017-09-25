@@ -115,6 +115,7 @@ pptxhelper.Slide = class Slide {
     constructor(presentation, template, data) {
         this.presentation = presentation;
         this.pendingData = 0;
+        this.pendingElements = [];
         this.slideGen = this.presentation.pptxGen.addNewSlide();
         if (template !== undefined) {
             this.templateData = data;
@@ -145,6 +146,18 @@ pptxhelper.Slide = class Slide {
     *     Add a clickable link
     */
     addImage(x, y, width, height, image, hyperlink) {
+        if (this.pendingData > 0) {
+            this.pendingElements.push({
+                type: 'image',
+                x: x,
+                y: y,
+                width: width,
+                height: height,
+                source: image,
+                hyperlink: hyperlink
+            });
+            return;
+        }
         if (image instanceof Image) {
             var dataURL = this.imageToDataURL(image);
         } else if (image.tagName !== undefined 
@@ -158,6 +171,7 @@ pptxhelper.Slide = class Slide {
             this.imageURLToDataURL(image, (dataURL) => {
                 --this.pendingData;
                 this.addImage(x, y, width, height, dataURL);
+                this.processPendingElements();
                 if (this.pendingData == 0) {
                     $(this).trigger('slide.ready');
                 }
@@ -188,12 +202,28 @@ pptxhelper.Slide = class Slide {
     *     Size of the font (default to 20)
     */
     addText(x, y, text, hyperlink, font_face, font_size) {
-        this.slideGen.addText(text, {
+        if (this.pendingData > 0) {
+            this.pendingElements.push({
+                type: 'text',
+                x: x,
+                y: y,
+                text: text,
+                hyperlink: hyperlink,
+                fontface: font_face,
+                fontsize: font_size
+            });
+        }
+        this.slideGen.addText(this.textPlaceholder(text), {
             x: x,
             y: y,
             font_face: font_face || 'Arial',
             font_size: font_size || 20,
             hyperlink: this.createHyperlinkRef(hyperlink)});
+    }
+    /** Add elements in the pending queue */
+    processPendingElements() {
+        this.loadTemplate(this.pendingElements);
+        this.pendingElements.length = 0;
     }
     createHyperlinkRef(hyperlink) {
         if (hyperlink !== undefined) {
@@ -286,7 +316,7 @@ pptxhelper.Slide = class Slide {
             var placeholderName = text.substring(placeholderStartIndex + 2,
                                                  placeholderEndIndex);
             var replacement = this.templateData[placeholderName];
-            text.replace('%(' + placeholderName + ')', replacement);
+            text = text.replace('%(' + placeholderName + ')', replacement);
             lastIndex = placeholderStartIndex + replacement.length;
         } while (true);
         return text;
