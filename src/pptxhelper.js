@@ -76,6 +76,10 @@ pptxhelper.Presentation = class Presentation {
         this.pptxGen.setTitle(title);
         return this;
     }
+    setSubject(subject) {
+        this.pptxGen.setSubject(subject);
+        return this;
+    }
     isReady() {
         var allSlideReady = true;
         $(this.slides).each(function() {
@@ -112,7 +116,10 @@ pptxhelper.Slide = class Slide {
         this.pendingData = 0;
         this.slideGen = this.presentation.pptxGen.addNewSlide();
         if (template !== undefined) {
-            this.loadTemplate(template, data);
+            this.templateData = data;
+            this.loadTemplate(template);
+        } else {
+            this.templateData = {};
         }
     }
     /** Determine if the slide is ready (all images are downloaded) */
@@ -243,6 +250,23 @@ pptxhelper.Slide = class Slide {
         canvas.getContext('2d').drawImage(image, 0, 0);
         image.dataURL = canvas.toDataURL('image/png');
         return image.dataURL;
+    }
+    /** Convert a (potential) placeholder text to its final value. */
+    textPlaceholder(text) {
+        var lastIndex = -1;
+        do {
+            var placeholderStartIndex = text.indexOf('%(', lastIndex + 1);
+            if (placeholderStartIndex == -1) {
+                break;
+            }
+            var placeholderEndIndex = text.indexOf(')', placeholderStartIndex);
+            var placeholderName = text.substring(placeholderStartIndex + 2,
+                                                 placeholderEndIndex);
+            var replacement = this.templateData[placeholderName];
+            text.replace('%(' + placeholderName + ')', replacement);
+            lastIndex = placeholderStartIndex + replacement.length;
+        } while (true);
+        return text;
     }
     /** Download an image and convert it to a data URL.
     *
