@@ -21,8 +21,8 @@
 * SOFTWARE.
 */
 var pptxhelper = pptxhelper || {};
-/** A single PPTX presentation. */
-pptxhelper.PPTX = class PPTX {
+/** A single presentation. */
+pptxhelper.Presentation = class Presentation {
     constructor() {
         this.pptxGen = new PptxGenJS();
         this.title = '';
@@ -30,6 +30,31 @@ pptxhelper.PPTX = class PPTX {
         this.width = 10;
         this.height = 5.625;
         this.slides = [];
+    }
+    /** Add a new slide to the presentation.
+    *
+    * If template is undefined, the new slide is empty. Otherwise template and
+    * data are parsed according to the Slide.loadTemplate() doc.
+    */
+    addSlide(template, data) {
+        var slide = new pptxhelper.Slide(this, template, data);
+        this.slides.push(slide);
+        $(slide).on('slide.ready', () => {
+            this.checkSlideReady();
+        });
+    }
+    /** Create a file from the presentation. */
+    download(filename) {
+        if (!this.isReady()) {
+            $(this).one('pptx.ready', () => {
+                this.download(filename);
+            });
+            return;
+        }
+        if (filename === undefined) {
+            filename = this.title;
+        }
+        this.pptxGen.save(filename);
     }
     setLayout(width, height, name) {
         if (name === undefined) {
@@ -51,17 +76,15 @@ pptxhelper.PPTX = class PPTX {
         this.pptxGen.setTitle(title);
         return this;
     }
-    /** Add a new slide to the presentation.
-    *
-    * If template is undefined, the new slide is empty. Otherwise template and
-    * data are parsed according to the Slide.loadTemplate() doc.
-    */
-    addSlide(template, data) {
-        var slide = new pptxhelper.Slide(this, template, data);
-        this.slides.push(slide);
-        $(slide).on('slide.ready', () => {
-            this.checkSlideReady();
+    isReady() {
+        var allSlideReady = true;
+        $(this.slides).each(function() {
+            if (!this.isReady()) {
+                allSlideReady = false;
+                return false;
+            }
         });
+        return allSlideReady;
     }
     checkSlideReady() {
         var allReady = true;
@@ -84,10 +107,10 @@ pptxhelper.PPTX = class PPTX {
 * "pptx.ready" event on itself.
 */
 pptxhelper.Slide = class Slide {
-    constructor(pptx, template, data) {
-        this.pptx = pptx;
+    constructor(presentation, template, data) {
+        this.presentation = presentation;
         this.pendingData = 0;
-        this.slideGen = this.pptx.pptxGen.addNewSlide();
+        this.slideGen = this.presentation.pptxGen.addNewSlide();
         if (template !== undefined) {
             this.loadTemplate(template, data);
         }
@@ -127,6 +150,9 @@ pptxhelper.Slide = class Slide {
             this.imageURLToDataURL(image, (dataURL) => {
                 --this.pendingData;
                 this.addImage(x, y, width, height, dataURL);
+                if (this.pendingData == 0) {
+                    $(this).trigger('slide.ready');
+                }
             });
             return;
         }
