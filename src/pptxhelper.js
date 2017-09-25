@@ -203,7 +203,7 @@ pptxhelper.Slide = class Slide {
     }
     /** Load a slide definition from a template.
     *
-    * The template is a JSON array where each element can be either a text or an
+    * The template is an array where each element can be either a text or an
     * image definition.
     *
     * All objects definitions share the following properties:
