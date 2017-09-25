@@ -1,5 +1,5 @@
-/** Helper to use js-xlsx.
-*
+/** Helper to use js-xlsx. */
+/* @license
 * Copyright 2017 Gabriel Paul 'Cley Faye' Risterucci
 *
 * Permission is hereby granted, free of charge, to any person obtaining a copy 
