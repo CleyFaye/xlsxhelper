@@ -188,7 +188,7 @@ pptxhelper.Slide = class Slide {
     *     Size of the font (default to 20)
     */
     addText(x, y, text, hyperlink, font_face, font_size) {
-        this.slideGen.addtext(text, {
+        this.slideGen.addText(text, {
             x: x,
             y: y,
             font_face: font_face || 'Arial',
