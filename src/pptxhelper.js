@@ -42,6 +42,7 @@ pptxhelper.Presentation = class Presentation {
         $(slide).on('slide.ready', () => {
             this.checkSlideReady();
         });
+        return slide;
     }
     /** Create a file from the presentation. */
     download(filename) {
@@ -196,7 +197,7 @@ pptxhelper.Slide = class Slide {
     }
     createHyperlinkRef(hyperlink) {
         if (hyperlink !== undefined) {
-            return { url: hyperlink };
+            return { url: this.textPlaceholder(hyperlink) };
         } else {
             return undefined;
         }
