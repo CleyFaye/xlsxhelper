@@ -236,26 +236,28 @@ pptxhelper.Slide = class Slide {
     * This also works for hyperlinks.
     */
     loadTemplate(template) {
-        for (var element in template) {
+        var me = this;
+        $(template).each(function() {
+            var element = this;
             if (element.type == 'text') {
-                this.addText(element.x,
-                             element.y,
-                             element.text,
-                             element.hyperlink,
-                             element.fontface,
-                             element.fontsize);
+                me.addText(element.x,
+                           element.y,
+                           element.text,
+                           element.hyperlink,
+                           element.fontface,
+                           element.fontsize);
             } else if (element.type == 'image') {
-                this.addImage(element.x,
-                              element.y,
-                              element.width,
-                              element.height,
-                              element.source,
-                              element.hyperlink);
+                me.addImage(element.x,
+                            element.y,
+                            element.width,
+                            element.height,
+                            element.source,
+                            element.hyperlink);
             } else {
                 throw  new Error('Unknown template element type ' 
                                  + element.type);
             }
-        }
+        });
     }
     /** Convert an image to a data URL.
     *
