@@ -235,7 +235,27 @@ pptxhelper.Slide = class Slide {
     * placeholder by the property value.
     * This also works for hyperlinks.
     */
-    loadTemplate(template, data) {
+    loadTemplate(template) {
+        for (var element in template) {
+            if (element.type == 'text') {
+                this.addText(element.x,
+                             element.y,
+                             element.text,
+                             element.hyperlink,
+                             element.fontface,
+                             element.fontsize);
+            } else if (element.type == 'image') {
+                this.addImage(element.x,
+                              element.y,
+                              element.width,
+                              element.height,
+                              element.source,
+                              element.hyperlink);
+            } else {
+                throw  new Error('Unknown template element type ' 
+                                 + element.type);
+            }
+        }
     }
     /** Convert an image to a data URL.
     *
