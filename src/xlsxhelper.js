@@ -46,10 +46,10 @@ xlsxhelper.Workbook = class Workbook {
     */
     addSheet(sheet) {
         var previousSheetIndex = this.SheetNames.indexOf(sheet.name);
-        if (previousIndex == -1) {
+        if (previousSheetIndex == -1) {
             this.SheetNames.push(sheet.name);
         }
-        this.Sheets[sheetName] = sheet;
+        this.Sheets[sheet.name] = sheet;
     }
     /** Create a file from the workbook content.
     *
@@ -87,6 +87,14 @@ xlsxhelper.Workbook = class Workbook {
         var finalFileName = fileName ? (fileName + '.' + fileExtension)
                                      : null;
         var outputData = XLSX.write(this, options);
+        if (format != 'csv') {
+            var buf = new ArrayBuffer(outputData.length);
+            var view = new Uint8Array(buf);
+            for (var i = 0; i < outputData.length; ++i) {
+                view[i] = outputData.charCodeAt(i) & 0xFF;
+            }
+            outputData = buf;
+        }
         if (downloader) {
             downloader(finalFileName, outputData, format != 'csv');
         }
@@ -102,22 +110,132 @@ xlsxhelper.Workbook = class Workbook {
 *     Sheet name
 * data : Array
 *     Array of rows
+* options : Object
+*     Parsing options. Support the following:
+*     - keepDateWithOffset : boolean
+*       Indicate that dates that have a timezone offset should be kept as-is and
+*       not converted into date objects.
+*
+*
+* Notes
+* -----
+* Sheet.setCell() is used for every cells, so the transformation rules applies.
 */
 xlsxhelper.Sheet = class Sheet {
-    constructor(name, data) {
+    constructor(name, data, options) {
         this.name = name;
         this._disableRangeCalculation = true;
-        for (var y = 0; y < inputArray.length; ++y) {
-            var row = inputArray[y];
+        for (var y = 0; y < data.length; ++y) {
+            var row = data[y];
             for (var x = 0; x < row.length; ++x) {
                 var cellValue = row[x];
                 if (cellValue == null) {
                     continue;
                 }
-                this.setCell(x, y, cellValue);
+                this.setCell(x, y, cellValue, options);
             }
         }
         this._disableRangeCalculation = false;
+        this._updateRange();
+    }
+    /** Create a sheet from a CSV file.
+    *
+    * Parameters
+    * ----------
+    * csvData : string
+    *     The raw CSV data
+    * name : string
+    *     The sheet name
+    * options : object
+    *     Parser options. Possible properties:
+    *     - stringDelimiter : string (optional)
+    *         Optional delimiter for strings (default to '"')
+    *     - cellDelimiter : string (optional)
+    *         Delimiter for cells on a row (default to ',')
+    *     - lineDelimiter : string (optional)
+    *         Line delimiter (default to '\n')
+    *     - keepDateWithOffset : boolean (optional)
+    *         If true, date with timezone specifier are kept as text instead of
+    *         being converted to date objects.
+    *
+    *
+    * Notes
+    * -----
+    * The CSV format supported here is restricted to the basics and is in no way
+    * a full CSV parser.
+    *
+    * Data interpretation rules are the same as when creating a Sheet instance.
+    * The "keep date with offset" rule is required because some spreadsheet
+    * formats don't handle timezones.
+    */
+    static fromCSV(
+        csvData,
+        name,
+        options) {
+        if (options === undefined) {
+            options = {};
+        }
+        var stringDelimiter = options.stringDelimiter || '"';
+        var cellDelimiter = options.cellDelimiter || ',';
+        var lineDelimiter = options.lineDelimiter || '\n';
+        var keepDateWithOffset = options.keepDateWithOffset || true;
+        var csvLines = csvData.split(lineDelimiter);
+        var dataRows = [];
+        $(csvLines).each(function() {
+            var csvLine = this.toString();
+            var dataRow = [];
+            let position = 0;
+            while (position < csvLine.length) {
+                var startingChar = csvLine[position];
+                ++position;
+                if (startingChar == stringDelimiter) {
+                    // Parse a delimited string
+                    let closingQuotePosition = csvLine.indexOf(stringDelimiter,
+                                                               position);
+                    do {
+                        if (closingQuotePosition == -1) {
+                            throw new Error('No closing quote found; line: "' 
+                                + csvLine + '"');
+                        }
+                        if (csvLine[closingQuotePosition - 1] != '\\') {
+                            break;
+                        }
+                        closingQuotePosition = csvLine.indexOf(
+                            stringDelimiter,
+                            closingQuotePosition + 1);
+                    } while (true);
+                    dataRow.push(csvLine.substring(
+                        position, 
+                        closingQuotePosition));
+                    position = closingQuotePosition + 1;
+                } else if (startingChar == cellDelimiter) {
+                    // Parse an empty cell
+                    dataRow.push(null);
+                } else {
+                    // Parse a non-delimited string
+                    let commaPosition = csvLine.indexOf(
+                        cellDelimiter, 
+                        position);
+                    if (commaPosition == -1) {
+                        commaPosition = csvLine.length;
+                    }
+                    dataRow.push(csvLine.substring(
+                        position - 1,
+                        commaPosition));
+                    position = commaPosition;
+                }
+                if (position < csvLine.length 
+                    && csvLine[position] != cellDelimiter) {
+                    throw new Error('Unknown cell delimiter: "' 
+                        + csvLine[position] + '"');
+                }
+                ++position;
+            }
+            dataRows.push(dataRow);
+        });
+        return new xlsxhelper.Sheet(name, dataRows, {
+            keepDateWithOffset: keepDateWithOffset
+        });
     }
     /** Get the value from a cell. */
     getCell(col, row) {
@@ -136,28 +254,55 @@ xlsxhelper.Sheet = class Sheet {
     *
     * Calling setCell() with an undefined value will empty the cell.
     */
-    setCell(col, row, value) {
-        const ISO8601_DATE_REGEX = /(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(\.\d{3})?([+-]\d{2}:?\d{2}|Z)?/;
+    setCell(col, row, value, options) {
+        if (options === undefined) {
+            options = {};
+        }
+        var keepDateWithOffset = options.keepDateWithOffset || true;
+        const ISO8601_DATE_REGEX = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(\.\d{3})?([+-]\d{2}:?\d{2}|Z)?$/;
         var match;
         var cellRef = XLSX.utils.encode_cell({c: col, r: row});
         if (value === undefined) {
             delete this[cellRef];
         } else {
             if (value instanceof Date) {
-                var cellType = 'd';
+                if (value.getTimezoneOffset() != 0 && keepDateWithOffset) {
+                    var cellType = 's';
+                    var cellText = value.toLocaleString();
+                } else {
+                    var cellType = 'd';
+                    var cellText = value.toISOString();
+                }
             } else if ((match = ISO8601_DATE_REGEX.exec(value)) !== null) {
-                var cellType = 'd';
-                value = new Date(value);
+                if (keepDateWithOffset &&
+                    (match[8] != 'Z' &&
+                     match[8] != '+00:00' &&
+                     match[8] != '-00:00' &&
+                     match[8] != '+0000' &&
+                     match[8] != '-0000')) {
+                    var cellType = 's';
+                    var cellText = value;
+                } else {
+                    var cellType = 'd';
+                    var cellText = value;
+                    value = new Date(value);
+                }
             } else if (typeof(value) == 'boolean') {
                 var cellType = 'b';
-            } else if (typeof(value) == 'number') {
+                var cellText = undefined;
+            } else if (typeof(value) == 'number' 
+                || parseFloat(value) == value) {
                 var cellType = 'n';
+                value = parseFloat(value);
+                var cellText = undefined;
             } else {
                 var cellType = 's';
+                var cellText = value;
             }
             var cell = {
                 v: value,
-                t: cellType
+                t: cellType,
+                w: cellText
             };
             this[cellRef] = cell;
         }
@@ -172,13 +317,13 @@ xlsxhelper.Sheet = class Sheet {
         var cMax = null;
         var rMin = null;
         var rMax = null;
-        for (key in this) {
+        for (let key in this) {
             if (this[key].t == undefined) {
-                return;
+                continue;
             }
             var cellCoordinates = XLSX.utils.decode_cell(key);
-            if (cellCoordinates.c == NaN || cellCoordinates.r == Nan) {
-                return;
+            if (cellCoordinates.c == NaN || cellCoordinates.r == NaN) {
+                continue;
             }
             if (cMin === null) {
                 cMin = cellCoordinates.c;
